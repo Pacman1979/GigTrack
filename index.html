@@ -783,7 +783,22 @@ function renderEarnings() {
     wb.appendChild(el);
   });
   updateBadge();
+
+  // Today's log
+  const sl=document.getElementById('shiftsList');
+  if(!today.length){
+    sl.innerHTML='<div class="empty-state">NO ENTRIES YET<br>TAP + TO ADD</div>';
+  } else {
+    sl.innerHTML=[...today].reverse().map(s=>{
+      const t=new Date(s.timestamp),time=t.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
+      const isDD=s.platform==='DOORDASH',isSH=s.platform==='SHERPA';
+      const c=isDD?'var(--dd)':isSH?'var(--sh)':'var(--ue)';
+      const n=isDD?'DoorDash':isSH?'Sherpa':'Uber Eats';
+      return `<div class="shift-item"><div class="shift-dot" style="background:${c};box-shadow:0 0 6px ${c}"></div><div class="shift-info"><div class="shift-platform" style="color:${c}">${n}</div><div class="shift-time">${time}${s.note?' · '+s.note:''}</div></div><div class="shift-amount" style="color:${c}">${fmt(s.amount)}</div><div style="display:flex;gap:4px;margin-left:4px"><button class="shift-edit-btn" onclick="openEditShift('${s.id}',false)">✏️</button><button class="shift-delete" onclick="deleteShift('${s.id}')">🗑</button></div></div>`;
+    }).join('');
+  }
 }
+
 
 let selPlat='DOORDASH';
 function openEarningsModal(p){
@@ -1385,11 +1400,15 @@ function restoreData(){
 function showDayLog(dateStr, dayLabel){
   _dayLogDate = dateStr;
   _dayLogPlat = 'DOORDASH';
-  document.getElementById('dayEditorAmount').value = '';
+  // Show panel first so all child elements are accessible
+  const panel = document.getElementById('dayEditorPanel');
+  if(!panel) return;
+  panel.style.display = 'block';
+  // Now safely access children
+  const amtInput = document.getElementById('dayEditorAmount');
+  if(amtInput) amtInput.value = '';
   deSelectPlat('DOORDASH');
   renderDayEditor();
-  const panel = document.getElementById('dayEditorPanel');
-  panel.style.display = 'block';
   panel.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
@@ -1404,10 +1423,14 @@ function renderDayEditor(){
   const isToday = dateStr===todayStr();
   const parts = dateStr.split('-');
   const dateDisplay = new Date(+parts[0],+parts[1]-1,+parts[2]).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
-  document.getElementById('dayEditorTitle').textContent = isToday ? 'TODAY' : dateDisplay.split(',')[0].toUpperCase();
-  document.getElementById('dayEditorSub').textContent = dateDisplay;
-  document.getElementById('dayEditorTotal').textContent = fmt(total);
-  const el = document.getElementById('dayEditorList');
+  const titleEl=document.getElementById('dayEditorTitle');
+  const subEl=document.getElementById('dayEditorSub');
+  const totalEl=document.getElementById('dayEditorTotal');
+  const el=document.getElementById('dayEditorList');
+  if(!titleEl||!el) return;
+  titleEl.textContent = isToday ? 'TODAY' : dateDisplay.split(',')[0].toUpperCase();
+  if(subEl) subEl.textContent = dateDisplay;
+  if(totalEl) totalEl.textContent = fmt(total);
   el.innerHTML = '';
   if(!shifts.length){
     const empty = document.createElement('div');
@@ -1611,79 +1634,6 @@ function restoreData(){
 // ══════════════════════════════════════
 // DAY LOG VIEWER
 // ══════════════════════════════════════
-function showDayLog(dateStr, dayLabel){
-  _dayLogDate = dateStr;
-  _dayLogPlat = 'DOORDASH';
-  document.getElementById('dayLogAmount').value = '';
-  dlSelectPlat('DOORDASH');
-  renderDayLog();
-  document.getElementById('dayLogModal').classList.add('open');
-  // auto-focus removed (causes keyboard layout shift on mobile)
-}
-
-function renderDayLog(){
-  const dateStr = _dayLogDate;
-  const shifts = S.shifts.filter(s=>localDateOfTs(s.timestamp)===dateStr);
-  const total = shifts.reduce((a,s)=>a+s.amount,0);
-  const isToday = dateStr===todayStr();
-  const [dy,dm,dd2] = dateStr.split('-');
-  const dateDisplay = new Date(+dy,+dm-1,+dd2).toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long'});
-  document.getElementById('dayLogTitle').textContent = isToday ? "TODAY" : dateDisplay.split(',')[0].toUpperCase();
-  document.getElementById('dayLogSub').textContent = dateDisplay + (isToday ? ' · TODAY' : '');
-  document.getElementById('dayLogTotal').textContent = fmt(total);
-  const el = document.getElementById('dayLogList');
-  if(!shifts.length){
-    el.innerHTML='<div class="empty-state">NO ENTRIES — USE + ADD ABOVE</div>';
-    return;
-  }
-  el.innerHTML = '';
-  [...shifts].reverse().forEach(function(s){
-    const t = new Date(s.timestamp);
-    const time = t.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
-    const isDD=s.platform==='DOORDASH', isSH=s.platform==='SHERPA';
-    const c = isDD?'var(--dd)':isSH?'var(--sh)':'var(--ue)';
-    const n = isDD?'DoorDash':isSH?'Sherpa':'Uber Eats';
-    const row = document.createElement('div');
-    row.className = 'shift-item';
-    row.style.cssText = 'animation:slideIn .25s ease';
-    // Build row using DOM methods to avoid all quote-escaping issues
-    const dot = document.createElement('div');
-    dot.className = 'shift-dot';
-    dot.style.cssText = 'background:'+c+';box-shadow:0 0 6px '+c;
-    const info = document.createElement('div');
-    info.className = 'shift-info';
-    const plat = document.createElement('div');
-    plat.className = 'shift-platform';
-    plat.style.color = c;
-    plat.textContent = n;
-    const timeEl = document.createElement('div');
-    timeEl.className = 'shift-time';
-    timeEl.textContent = time + (s.note ? ' · ' + s.note : '');
-    info.appendChild(plat);
-    info.appendChild(timeEl);
-    const amt = document.createElement('div');
-    amt.className = 'shift-amount';
-    amt.style.color = c;
-    amt.textContent = fmt(s.amount);
-    const btnWrap = document.createElement('div');
-    btnWrap.style.cssText = 'display:flex;gap:4px;margin-left:4px';
-    const editBtn = document.createElement('button');
-    editBtn.className = 'shift-edit-btn';
-    editBtn.textContent = '✏️';
-    editBtn.onclick = (function(sid){ return function(){ openEditShift(sid, true); }; })(s.id);
-    const delBtn = document.createElement('button');
-    delBtn.className = 'shift-delete';
-    delBtn.textContent = '🗑';
-    delBtn.onclick = (function(sid){ return function(){ deleteDayEntry(sid); }; })(s.id);
-    btnWrap.appendChild(editBtn);
-    btnWrap.appendChild(delBtn);
-    row.appendChild(dot);
-    row.appendChild(info);
-    row.appendChild(amt);
-    row.appendChild(btnWrap);
-    el.appendChild(row);
-  });
-}
 // ══════════════════════════════════════
 // INIT
 // ══════════════════════════════════════

@@ -335,7 +335,17 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       </div>
     </div>
     <div class="card">
-      <div class="week-header"><div class="section-label">THIS WEEK</div><div class="week-total" id="weekTotal">$0.00</div></div>
+      <div class="week-header">
+        <div style="display:flex;align-items:center;gap:8px">
+          <button onclick="changeWeek(-1)" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:16px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">‹</button>
+          <div>
+            <div class="section-label" id="weekLabel">THIS WEEK</div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.06em;margin-top:1px" id="weekDateRange"></div>
+          </div>
+          <button onclick="changeWeek(1)" id="weekNextBtn" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:16px;width:28px;height:28px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1">›</button>
+        </div>
+        <div class="week-total" id="weekTotal">$0.00</div>
+      </div>
       <div class="week-bars" id="weekBars"></div>
     </div>
     <div id="dayEditorPanel" style="display:none;margin:0 20px 16px;background:#1e1e30;border:2px solid #4a4a6a;border-radius:16px;padding:16px 18px;animation:slideIn .25s ease">
@@ -662,12 +672,22 @@ const urgText  = d => d < 0 ? Math.abs(d)+'d overdue' : d===0 ? 'DUE TODAY' : d=
 // TABS
 // ══════════════════════════════════════
 let currentTab = 'earnings';
+let weekOffset = 0; // 0 = current week, -1 = last week, etc.
 const tabTitles = {
   earnings: "Today's<br><span>Earnings</span>",
   upcoming: "Upcoming<br><span>Expenses</span>",
   wishlist: "My<br><span>Wish List</span>",
   budget:   "Weekly<br><span>Budget</span>"
 };
+
+function changeWeek(dir){
+  if(dir===1&&weekOffset>=0)return; // can't go forward past current week
+  weekOffset+=dir;
+  // Close day editor if open
+  const panel=document.getElementById('dayEditorPanel');
+  if(panel)panel.style.display='none';
+  renderEarnings();
+}
 
 function switchTab(t) {
   currentTab = t;
@@ -685,6 +705,7 @@ function switchTab(t) {
   if (t === 'upcoming') renderExpenses();
   if (t === 'wishlist') renderWishList();
   if (t === 'budget')   renderBudget();
+  if (t === 'earnings') weekOffset=0;
   renderEarnings();
 }
 
@@ -722,31 +743,45 @@ function renderEarnings() {
 
   // Week bars
   const DAYS=['MON','TUE','WED','THU','FRI','SAT','SUN'];
-  const now=new Date(), dow=(now.getDay()+6)%7;
   const localDs=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
-  const wDates=Array.from({length:7},(_,i)=>{const d=new Date(now);d.setDate(d.getDate()-dow+i);return localDs(d);});
-  const wTotals=wDates.map(d=>d===todayStr()?total:(S.weekHistory[d]||0));
+  const now=new Date();
+  // Build the 7 dates for the viewed week (weekOffset=0 is current week)
+  const baseMonday=new Date(now);
+  const dow=(now.getDay()+6)%7;
+  baseMonday.setDate(now.getDate()-dow+(weekOffset*7));
+  const wDates=Array.from({length:7},(_,i)=>{const d=new Date(baseMonday);d.setDate(baseMonday.getDate()+i);return localDs(d);});
+  // Totals: for current week use live total for today; for all other days use weekHistory or scan shifts
+  const wTotals=wDates.map(d=>{
+    if(d===todayStr()&&weekOffset===0)return total;
+    // Try weekHistory first, then scan shifts directly for accuracy
+    const fromShifts=S.shifts.filter(s=>localDateOfTs(s.timestamp)===d).reduce((a,s)=>a+s.amount,0);
+    return fromShifts>0?fromShifts:(S.weekHistory[d]||0);
+  });
+  // Week label
+  const weekLabelEl=document.getElementById('weekLabel');
+  const weekRangeEl=document.getElementById('weekDateRange');
+  if(weekLabelEl){
+    if(weekOffset===0){weekLabelEl.textContent='THIS WEEK';}
+    else if(weekOffset===-1){weekLabelEl.textContent='LAST WEEK';}
+    else{weekLabelEl.textContent=(Math.abs(weekOffset))+' WEEKS AGO';}
+    const wStart=new Date(baseMonday);
+    const wEnd=new Date(baseMonday);wEnd.setDate(wEnd.getDate()+6);
+    const fmt2=d=>d.toLocaleDateString('en-AU',{day:'numeric',month:'short'});
+    if(weekRangeEl)weekRangeEl.textContent=fmt2(wStart)+' – '+fmt2(wEnd);
+  }
+  // Disable next arrow if on current week
+  const nextBtn=document.getElementById('weekNextBtn');
+  if(nextBtn)nextBtn.style.opacity=weekOffset>=0?'0.3':'1';
   document.getElementById('weekTotal').textContent=fmt(wTotals.reduce((a,b)=>a+b,0));
   const maxV=Math.max(...wTotals,1), wb=document.getElementById('weekBars'); wb.innerHTML='';
   wTotals.forEach((v,i)=>{
-    const isT=wDates[i]===todayStr(), el=document.createElement('div'); el.className='day-bar-wrap';
+    const isT=wDates[i]===todayStr()&&weekOffset===0, el=document.createElement('div'); el.className='day-bar-wrap';
     el.style.cursor='pointer';
     el.title=DAYS[i]+': '+fmt(v);
-    el.onclick=()=>showDayLog(wDates[i],DAYS[i]);
+    el.onclick=(function(date,label){return function(){showDayLog(date,label);};})(wDates[i],DAYS[i]);
     el.innerHTML=`<div class="day-bar ${v>0?'has-data':''} ${isT?'today':''}" style="height:${Math.max(v/maxV*100,4)}%"></div><div class="day-label ${isT?'today':''}">${DAYS[i]}</div>`;
     wb.appendChild(el);
   });
-
-  const sl=document.getElementById('shiftsList');
-  if(!today.length){sl.innerHTML='<div class="empty-state">NO ENTRIES YET<br>TAP + TO ADD</div>';}
-  else sl.innerHTML=[...today].reverse().map(s=>{
-    const t=new Date(s.timestamp),time=t.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'});
-    const isDD=s.platform==='DOORDASH', isSH=s.platform==='SHERPA';
-    const c=isDD?'var(--dd)':isSH?'var(--sh)':'var(--ue)';
-    const n=isDD?'DoorDash':isSH?'Sherpa':'Uber Eats';
-    return `<div class="shift-item"><div class="shift-dot" style="background:${c};box-shadow:0 0 6px ${c}"></div><div class="shift-info"><div class="shift-platform" style="color:${c}">${n}</div><div class="shift-time">${time}${s.note?' · '+s.note:''}</div></div><div class="shift-amount" style="color:${c}">${fmt(s.amount)}</div><div style="display:flex;gap:4px;margin-left:4px"><button class="shift-edit-btn" onclick="openEditShift('${s.id}')">✏️</button><button class="shift-delete" onclick="deleteShift('${s.id}')">🗑</button></div></div>`;
-  }).join('');
-
   updateBadge();
 }
 

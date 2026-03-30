@@ -481,7 +481,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 <div class="modal-overlay" id="expenseModal" onclick="closeBg(event,'expenseModal')">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">Add Expense</div>
+    <div class="modal-title" id="expModalTitle">Add Expense</div>
+    <input type="hidden" id="editingExpenseId" value="">
     <label class="field-label">EXPENSE NAME</label>
     <input class="text-input" type="text" id="expNameInput" placeholder="e.g. Electricity bill">
     <label class="field-label">AMOUNT</label>
@@ -503,7 +504,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="recur-opt" data-val="yearly" onclick="selectRecur(this)">Yearly</div>
       </div>
     </div>
-    <button class="submit-btn" onclick="saveExpense()">Save Expense</button>
+    <button class="submit-btn" id="expSubmitBtn" onclick="saveExpense()">Save Expense</button>
   </div>
 </div>
 
@@ -818,7 +819,7 @@ function renderExpenses(){
     const d=daysUntil(exp.dueDate),uc=urgClass(d),ut=urgText(d);
     const [dy,dm,dd2]=exp.dueDate.split('-');
     const df=new Date(+dy,+dm-1,+dd2).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
-    return `<div class="expense-item ${uc}"><div class="expense-icon">${exp.icon}</div><div class="expense-info"><div class="expense-name">${exp.name}</div><div class="expense-meta"><span>${df}</span>${exp.recurring?`<span class="recur-tag">${exp.recurFreq}</span>`:''}</div></div><div class="expense-right"><div class="expense-amount">${fmt(exp.amount)}</div><span class="due-badge ${uc}">${ut}</span><button class="expense-delete" onclick="deleteExpense('${exp.id}')">✕</button></div></div>`;
+    return `<div class="expense-item ${uc}"><div class="expense-icon">${exp.icon}</div><div class="expense-info"><div class="expense-name">${exp.name}</div><div class="expense-meta"><span>${df}</span>${exp.recurring?`<span class="recur-tag">${exp.recurFreq}</span>`:''}</div></div><div class="expense-right"><div class="expense-amount">${fmt(exp.amount)}</div><span class="due-badge ${uc}">${ut}</span><div style="display:flex;gap:4px;margin-top:4px"><button class="shift-edit-btn" onclick="openEditExpense('${exp.id}')">✏️</button><button class="expense-delete" onclick="deleteExpense('${exp.id}')">🗑</button></div></div></div>`;
   }).join('');
 }
 function updateBadge(){
@@ -829,6 +830,9 @@ function updateBadge(){
 const EXP_EMOJIS=['🏠','🚗','💡','📱','🛒','🏥','💊','🎓','💳','📺','🌊','✈️','🍕','☕','🐶','🎮'];
 let selExpEmoji='💳',isRecur=false,selRecur='weekly';
 function openExpenseModal(){
+  document.getElementById('editingExpenseId').value='';
+  document.getElementById('expModalTitle').textContent='Add Expense';
+  document.getElementById('expSubmitBtn').textContent='Save Expense';
   selExpEmoji='💳';isRecur=false;selRecur='weekly';
   document.getElementById('expNameInput').value='';
   document.getElementById('expAmountInput').value='';
@@ -855,8 +859,32 @@ function saveExpense(){
   const amount=parseFloat(document.getElementById('expAmountInput').value);
   const dueDate=document.getElementById('expDateInput').value;
   if(!name){toast('Enter a name');return;}if(!amount||amount<=0){toast('Enter an amount');return;}if(!dueDate){toast('Pick a date');return;}
-  S.expenses.push({id:Date.now().toString(),name,amount,dueDate,icon:selExpEmoji,recurring:isRecur,recurFreq:isRecur?selRecur:null});
-  save();closeM('expenseModal');renderExpenses();updateBadge();toast('✓ '+name+' saved');
+  const editId=document.getElementById('editingExpenseId').value;
+  if(editId){
+    const exp=S.expenses.find(e=>e.id===editId);
+    if(exp){exp.name=name;exp.amount=amount;exp.dueDate=dueDate;exp.icon=selExpEmoji;exp.recurring=isRecur;exp.recurFreq=isRecur?selRecur:null;}
+    save();closeM('expenseModal');renderExpenses();updateBadge();toast('✓ '+name+' updated');
+  } else {
+    S.expenses.push({id:Date.now().toString(),name,amount,dueDate,icon:selExpEmoji,recurring:isRecur,recurFreq:isRecur?selRecur:null});
+    save();closeM('expenseModal');renderExpenses();updateBadge();toast('✓ '+name+' saved');
+  }
+}
+function openEditExpense(id){
+  const exp=S.expenses.find(e=>e.id===id);
+  if(!exp)return;
+  document.getElementById('editingExpenseId').value=id;
+  document.getElementById('expModalTitle').textContent='Edit Expense';
+  document.getElementById('expSubmitBtn').textContent='Update Expense';
+  document.getElementById('expNameInput').value=exp.name;
+  document.getElementById('expAmountInput').value=exp.amount;
+  document.getElementById('expDateInput').value=exp.dueDate;
+  selExpEmoji=exp.icon||'💳';
+  isRecur=exp.recurring||false;
+  selRecur=exp.recurFreq||'weekly';
+  buildEmoji('emojiGridExp',EXP_EMOJIS,'selExpEmoji',selExpEmoji);
+  updateRecurUI();
+  if(isRecur){document.querySelectorAll('.recur-opt[data-val]').forEach(o=>o.classList.toggle('selected',o.dataset.val===selRecur));}
+  document.getElementById('expenseModal').classList.add('open');
 }
 function deleteExpense(id){S.expenses=S.expenses.filter(e=>e.id!==id);save();renderExpenses();updateBadge();toast('Removed');}
 

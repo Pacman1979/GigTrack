@@ -308,9 +308,17 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <!-- ══ EARNINGS ══ -->
   <div class="page active" id="page-earnings">
     <div class="total-card">
-      <div class="total-label">TOTAL TODAY</div>
+      <div class="total-label">GROSS TODAY</div>
       <div class="total-amount" id="totalDisplay">$0<span class="cents">.00</span></div>
-      <div class="goal-row"><div class="goal-label">DAILY GOAL</div><div class="goal-pct" id="goalPct">0%</div></div>
+      <div class="gross-row" id="deductionRow" style="display:none">
+        <span class="gross-label">DEDUCTIONS</span>
+        <span class="gross-val" id="deductionDisplay" style="color:var(--danger)">-$0.00</span>
+      </div>
+      <div class="net-row" id="netRow" style="display:none">
+        <span class="net-label">NET TODAY</span>
+        <span class="net-amount" id="netDisplay" style="color:var(--teal)">$0.00</span>
+      </div>
+      <div class="goal-row" style="margin-top:12px"><div class="goal-label">DAILY GOAL</div><div class="goal-pct" id="goalPct">0%</div></div>
       <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
       <div class="goal-remaining" id="goalRemaining"></div>
     </div>
@@ -376,8 +384,9 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       </div>
     </div>
     <div class="shifts-card">
-      <div class="shifts-header"><div class="section-label">TODAY'S LOG</div><button class="clear-btn" onclick="clearToday()">CLEAR TODAY</button></div>
+      <div class="shifts-header"><div class="section-label">TODAY'S LOG</div><div style="display:flex;gap:6px"><button class="clear-btn" style="color:var(--danger)" onclick="openDeductionModal()">- COST</button><button class="clear-btn" onclick="clearToday()">CLEAR</button></div></div>
       <div id="shiftsList"></div>
+      <div id="deductionsList" style="margin-top:4px"></div>
     </div>
   </div>
 
@@ -595,6 +604,28 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   </div>
 </div>
 
+<!-- ═══ MODAL: Deduction ═══ -->
+<div class="modal-overlay" id="deductionModal" onclick="closeBg(event,'deductionModal')">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Add Deduction</div>
+    <label class="field-label">CATEGORY</label>
+    <div class="recur-options" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px" id="deductCatBtns">
+      <div class="recur-opt selected" onclick="selectDeductCat(this,'Fuel')">⛽ Fuel</div>
+      <div class="recur-opt" onclick="selectDeductCat(this,'Phone')">📱 Phone</div>
+      <div class="recur-opt" onclick="selectDeductCat(this,'Food')">🍕 Food</div>
+      <div class="recur-opt" onclick="selectDeductCat(this,'Parking')">🅿️ Park</div>
+      <div class="recur-opt" onclick="selectDeductCat(this,'Equipment')">🎒 Equip</div>
+      <div class="recur-opt" onclick="selectDeductCat(this,'Other')">💸 Other</div>
+    </div>
+    <label class="field-label">AMOUNT</label>
+    <div class="amount-input-wrap"><span class="amount-prefix">$</span><input class="amount-input" type="number" id="deductAmountInput" placeholder="0.00" step="0.01" min="0"></div>
+    <label class="field-label">NOTE (OPTIONAL)</label>
+    <input class="text-input" type="text" id="deductNoteInput" placeholder="e.g. Shell Helensvale">
+    <button class="submit-btn" style="background:linear-gradient(135deg,var(--danger),#cc2244);margin-top:4px" onclick="addDeduction()">Log Deduction</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -604,7 +635,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 const KEY = 'gigtrack_v5';
 let S = (() => {
   const def = {
-    shifts:[], dailyGoal:150, weekHistory:{},
+    shifts:[], deductions:[], dailyGoal:150, weekHistory:{},
     expenses:[], wishes:[],
     budget:[], weeklyIncome:800,
     // budget item: { id, name, amount, freq, icon }
@@ -729,6 +760,19 @@ function renderEarnings() {
 
   const [dol,cts]=total.toFixed(2).split('.');
   document.getElementById('totalDisplay').innerHTML=`$${dol}<span class="cents">.${cts}</span>`;
+  // Deductions
+  const todayDeductions=S.deductions.filter(d=>localDateOfTs(d.timestamp)===todayStr());
+  const totalDeduct=todayDeductions.reduce((a,d)=>a+d.amount,0);
+  const net=total-totalDeduct;
+  const deductRow=document.getElementById('deductionRow');
+  const netRow=document.getElementById('netRow');
+  if(deductRow) deductRow.style.display=totalDeduct>0?'flex':'none';
+  if(netRow) netRow.style.display=totalDeduct>0?'flex':'none';
+  const deductEl=document.getElementById('deductionDisplay');
+  const netEl=document.getElementById('netDisplay');
+  if(deductEl) deductEl.textContent='-'+fmt(totalDeduct);
+  if(netEl){ netEl.textContent=fmt(net); netEl.style.color=net>=0?'var(--teal)':'var(--danger)'; }
+  // Goal progress based on NET earnings
   document.getElementById('goalPct').textContent=pct+'%';
   document.getElementById('progressFill').style.width=pct+'%';
   document.getElementById('goalRemaining').textContent=
@@ -783,6 +827,35 @@ function renderEarnings() {
     wb.appendChild(el);
   });
   updateBadge();
+
+  // Deductions log - DOM-based to avoid quote escaping issues
+  const dl=document.getElementById('deductionsList');
+  if(dl){
+    dl.innerHTML='';
+    const todayD=S.deductions.filter(d=>localDateOfTs(d.timestamp)===todayStr());
+    if(todayD.length){
+      const hdr=document.createElement('div');
+      hdr.style.cssText='font-family:JetBrains Mono,monospace;font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;padding:10px 0 6px';
+      hdr.textContent='Deductions';
+      dl.appendChild(hdr);
+      [...todayD].reverse().forEach(function(d){
+        const row=document.createElement('div');
+        row.className='deduction-item';
+        const dot=document.createElement('div');dot.className='deduction-dot';
+        const info=document.createElement('div');info.className='deduction-info';
+        const cat=document.createElement('div');cat.className='deduction-cat';cat.textContent=d.cat;
+        const timeEl=document.createElement('div');timeEl.className='deduction-time';
+        timeEl.textContent=new Date(d.timestamp).toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'})+(d.note?' · '+d.note:'');
+        info.appendChild(cat);info.appendChild(timeEl);
+        const amt=document.createElement('div');amt.className='deduction-amount';amt.textContent='-'+fmt(d.amount);
+        const btn=document.createElement('button');
+        btn.className='shift-delete';btn.style.marginLeft='4px';btn.textContent='🗑';
+        btn.onclick=(function(did){return function(){deleteDeduction(did);};})(d.id);
+        row.appendChild(dot);row.appendChild(info);row.appendChild(amt);row.appendChild(btn);
+        dl.appendChild(row);
+      });
+    }
+  }
 
   // Today's log
   const sl=document.getElementById('shiftsList');
@@ -1297,6 +1370,51 @@ function saveEditShift(){
 }
 
 // ══════════════════════════════════════
+// DEDUCTIONS
+// ══════════════════════════════════════
+let selDeductCat = 'Fuel';
+
+function openDeductionModal(){
+  selDeductCat = 'Fuel';
+  document.getElementById('deductAmountInput').value = '';
+  document.getElementById('deductNoteInput').value = '';
+  // Reset category buttons
+  document.querySelectorAll('#deductCatBtns .recur-opt').forEach(el=>{
+    el.classList.toggle('selected', el.textContent.includes('Fuel'));
+  });
+  document.getElementById('deductionModal').classList.add('open');
+}
+
+function selectDeductCat(el, cat){
+  selDeductCat = cat;
+  document.querySelectorAll('#deductCatBtns .recur-opt').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function addDeduction(){
+  const v = parseFloat(document.getElementById('deductAmountInput').value);
+  if(!v||v<=0){ toast('Enter a valid amount'); return; }
+  const note = document.getElementById('deductNoteInput').value.trim();
+  S.deductions.push({
+    id: Date.now().toString(),
+    cat: selDeductCat,
+    amount: v,
+    note,
+    timestamp: new Date().toISOString()
+  });
+  save();
+  closeM('deductionModal');
+  renderEarnings();
+  toast('✓ -'+fmt(v)+' '+selDeductCat+' logged');
+}
+
+function deleteDeduction(id){
+  S.deductions = S.deductions.filter(d=>d.id!==id);
+  save(); renderEarnings();
+  toast('Deduction removed');
+}
+
+// ══════════════════════════════════════
 // CSV EXPORT
 // ══════════════════════════════════════
 function exportCSV(){
@@ -1318,6 +1436,17 @@ function exportCSV(){
   });
   const earningsTotal = S.shifts.reduce((a,s)=>a+s.amount,0);
   rows.push(['','','TOTAL',earningsTotal.toFixed(2),'']);
+  rows.push([]);
+
+  // --- Deductions ---
+  rows.push(['DEDUCTIONS']);
+  rows.push(['Date','Time','Category','Amount','Note']);
+  [...S.deductions].sort((a,b)=>a.timestamp.localeCompare(b.timestamp)).forEach(d=>{
+    const dt=new Date(d.timestamp);
+    rows.push([dt.toLocaleDateString('en-AU'),dt.toLocaleTimeString('en-AU',{hour:'2-digit',minute:'2-digit'}),d.cat,d.amount.toFixed(2),d.note||'']);
+  });
+  const deductTotal=S.deductions.reduce((a,d)=>a+d.amount,0);
+  rows.push(['','','TOTAL',deductTotal.toFixed(2),'']);
   rows.push([]);
 
   // --- Upcoming Expenses ---

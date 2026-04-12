@@ -55,6 +55,10 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .empty-state{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:30px 0;letter-spacing:.05em;line-height:2}
 .summary-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 20px 16px}
 .chip{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px}
+.exp-filter-chip{transition:all .2s}
+.exp-filter-chip.active-week{border-color:rgba(255,149,0,.5);background:rgba(255,149,0,.08)}
+.exp-filter-chip.active-month{border-color:rgba(255,197,61,.5);background:rgba(255,197,61,.08)}
+.exp-filter-chip.active-future{border-color:rgba(124,107,255,.5);background:rgba(124,107,255,.08)}
 .chip-label{font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;margin-bottom:6px}
 .chip-val{font-size:22px;font-weight:800;letter-spacing:-.02em}
 @keyframes slideIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
@@ -407,12 +411,22 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
   <!-- ══ UPCOMING ══ -->
   <div class="page" id="page-upcoming">
     <div class="summary-2col" style="grid-template-columns:1fr 1fr 1fr">
-      <div class="chip"><div class="chip-label">DUE THIS WEEK</div><div class="chip-val" id="dueWeekTotal" style="color:var(--warn);font-size:17px">$0.00</div></div>
-      <div class="chip"><div class="chip-label">DUE THIS MONTH</div><div class="chip-val" id="dueMonthTotal" style="color:var(--gold);font-size:17px">$0.00</div></div>
-      <div class="chip"><div class="chip-label">FUTURE MONTHS</div><div class="chip-val" id="dueFutureTotal" style="color:var(--accent);font-size:17px">$0.00</div></div>
+      <div class="chip exp-filter-chip" id="chipWeek" onclick="setExpFilter('week')" style="cursor:pointer">
+        <div class="chip-label">DUE THIS WEEK</div>
+        <div class="chip-val" id="dueWeekTotal" style="color:var(--warn);font-size:17px">$0.00</div>
+      </div>
+      <div class="chip exp-filter-chip" id="chipMonth" onclick="setExpFilter('month')" style="cursor:pointer">
+        <div class="chip-label">DUE THIS MONTH</div>
+        <div class="chip-val" id="dueMonthTotal" style="color:var(--gold);font-size:17px">$0.00</div>
+      </div>
+      <div class="chip exp-filter-chip" id="chipFuture" onclick="setExpFilter('future')" style="cursor:pointer">
+        <div class="chip-label">FUTURE MONTHS</div>
+        <div class="chip-val" id="dueFutureTotal" style="color:var(--accent);font-size:17px">$0.00</div>
+      </div>
     </div>
+    <div id="expFilterLabel" style="margin:0 20px 10px;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;display:none"></div>
     <div class="section-header-row">
-      <div class="section-label">UPCOMING EXPENSES</div>
+      <div class="section-label" id="expSectionLabel">UPCOMING EXPENSES</div>
       <button class="add-btn-sm" onclick="openExpenseModal()">+ ADD</button>
     </div>
     <div class="expenses-list" id="expensesList"></div>
@@ -748,6 +762,7 @@ const urgText  = d => d < 0 ? Math.abs(d)+'d overdue' : d===0 ? 'DUE TODAY' : d=
 // TABS
 // ══════════════════════════════════════
 let currentTab = 'earnings';
+let expFilter = 'all'; // 'all' | 'week' | 'month' | 'future'
 let weekOffset = 0; // 0 = current week, -1 = last week, etc.
 const tabTitles = {
   earnings: "Today's<br><span>Earnings</span>",
@@ -779,7 +794,7 @@ function switchTab(t) {
   if (t === 'upcoming' || t === 'wishlist' || t === 'debts') fab.classList.add('hidden');
   if (t === 'budget') { fab.classList.remove('hidden'); fab.classList.add('teal'); }
   // Render
-  if (t === 'upcoming') renderExpenses();
+  if (t === 'upcoming') { expFilter='all'; renderExpenses(); }
   if (t === 'wishlist') renderWishList();
   if (t === 'debts')    renderDebts();
   if (t === 'budget')   renderBudget();
@@ -974,24 +989,63 @@ function getActiveExpenses(){
     return{...e,dueDate:due.toISOString().slice(0,10)};
   });
 }
+function setExpFilter(f){
+  // Toggle off if tapping same filter
+  expFilter = (expFilter === f) ? 'all' : f;
+  renderExpenses();
+}
+
 function renderExpenses(){
   const active=getActiveExpenses();
   const now=new Date();now.setHours(0,0,0,0);
   const in7=new Date(now);in7.setDate(in7.getDate()+7);
-  // End of current calendar month (not rolling 30 days)
   const endOfMonth=new Date(now.getFullYear(),now.getMonth()+1,0);endOfMonth.setHours(23,59,59,999);
-  document.getElementById('dueWeekTotal').textContent=fmt(active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>=now&&d<=in7;}).reduce((a,e)=>a+e.amount,0));
-  document.getElementById('dueMonthTotal').textContent=fmt(active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>=now&&d<=endOfMonth;}).reduce((a,e)=>a+e.amount,0));
-  document.getElementById('dueFutureTotal').textContent=fmt(active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>endOfMonth;}).reduce((a,e)=>a+e.amount,0));
+
+  // Calculate totals for each bucket
+  const weekItems   = active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>=now&&d<=in7;});
+  const monthItems  = active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>=now&&d<=endOfMonth;});
+  const futureItems = active.filter(e=>{const d=new Date(e.dueDate+'T00:00:00');return d>endOfMonth;});
+
+  document.getElementById('dueWeekTotal').textContent  = fmt(weekItems.reduce((a,e)=>a+e.amount,0));
+  document.getElementById('dueMonthTotal').textContent = fmt(monthItems.reduce((a,e)=>a+e.amount,0));
+  document.getElementById('dueFutureTotal').textContent= fmt(futureItems.reduce((a,e)=>a+e.amount,0));
+
+  // Update chip active states
+  const chipMap = {week:'chipWeek', month:'chipMonth', future:'chipFuture'};
+  const classMap = {week:'active-week', month:'active-month', future:'active-future'};
+  ['week','month','future'].forEach(f=>{
+    const chip = document.getElementById(chipMap[f]);
+    if(!chip) return;
+    chip.classList.remove('active-week','active-month','active-future');
+    if(expFilter === f) chip.classList.add(classMap[f]);
+  });
+
+  // Update section label
+  const labelMap = {all:'UPCOMING EXPENSES', week:'DUE THIS WEEK', month:'DUE THIS MONTH', future:'FUTURE MONTHS'};
+  const secLabel = document.getElementById('expSectionLabel');
+  if(secLabel) secLabel.textContent = labelMap[expFilter] || 'UPCOMING EXPENSES';
+
+  // Determine which items to show
+  let shown = active;
+  if(expFilter === 'week')   shown = weekItems;
+  if(expFilter === 'month')  shown = monthItems;
+  if(expFilter === 'future') shown = futureItems;
+
   const el=document.getElementById('expensesList');
-  if(!active.length){el.innerHTML='<div class="empty-state">NO EXPENSES YET<br>TAP + ADD TO GET STARTED</div>';return;}
-  el.innerHTML=[...active].sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(exp=>{
+  if(!shown.length){
+    const msg = expFilter==='all' ? 'NO EXPENSES YET<br>TAP + ADD TO GET STARTED'
+      : 'NO EXPENSES IN THIS PERIOD';
+    el.innerHTML='<div class="empty-state">'+msg+'</div>';
+    return;
+  }
+  el.innerHTML=[...shown].sort((a,b)=>a.dueDate.localeCompare(b.dueDate)).map(exp=>{
     const d=daysUntil(exp.dueDate),uc=urgClass(d),ut=urgText(d);
     const [dy,dm,dd2]=exp.dueDate.split('-');
     const df=new Date(+dy,+dm-1,+dd2).toLocaleDateString('en-AU',{day:'numeric',month:'short'});
     return `<div class="expense-item ${uc}"><div class="expense-icon">${exp.icon}</div><div class="expense-info"><div class="expense-name">${exp.name}</div><div class="expense-meta"><span>${df}</span>${exp.recurring?`<span class="recur-tag">${exp.recurFreq}</span>`:''}</div></div><div class="expense-right"><div class="expense-amount">${fmt(exp.amount)}</div><span class="due-badge ${uc}">${ut}</span><div style="display:flex;gap:4px;margin-top:4px"><button class="shift-edit-btn" onclick="openEditExpense('${exp.id}')">✏️</button><button class="expense-delete" onclick="deleteExpense('${exp.id}')">🗑</button></div></div></div>`;
   }).join('');
 }
+
 function updateBadge(){
   const n=getActiveExpenses().filter(e=>{const d=daysUntil(e.dueDate);return d>=0&&d<=7;}).length;
   const b=document.getElementById('upcomingBadge');b.textContent=n;b.style.display=n>0?'flex':'none';

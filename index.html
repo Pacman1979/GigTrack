@@ -573,7 +573,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 <div class="modal-overlay" id="wishModal" onclick="closeBg(event,'wishModal')">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">Add to Wish List</div>
+    <div class="modal-title" id="wishModalTitle">Add to Wish List</div>
+    <input type="hidden" id="editingWishId" value="">
     <label class="field-label">ITEM NAME</label>
     <input class="text-input" type="text" id="wishNameInput" placeholder="e.g. New phone, Holiday, Sneakers">
     <label class="field-label">PRICE / TARGET</label>
@@ -588,7 +589,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="recur-opt selected" id="priMed" onclick="selectPri('medium')">Medium</div>
       <div class="recur-opt" id="priHigh" onclick="selectPri('high')">High 🔥</div>
     </div>
-    <button class="submit-btn gold" onclick="saveWish()">Add to Wish List ⭐</button>
+    <button class="submit-btn gold" id="wishSubmitBtn" onclick="saveWish()">Add to Wish List ⭐</button>
   </div>
 </div>
 
@@ -1153,7 +1154,8 @@ function renderWishList(){
           <div class="wish-meta"><span style="color:${priColors[w.priority||'medium']};font-weight:700">${priLabels[w.priority||'medium']}</span>${w.note?'<span>· '+w.note+'</span>':''}</div>
         </div>
         <div class="wish-price">${fmt(w.price)}</div>
-        <button class="wish-delete" onclick="deleteWish('${w.id}')">✕</button>
+        <button class="shift-edit-btn" onclick="openEditWish('${w.id}')" style="margin-right:2px">✏️</button>
+        <button class="wish-delete" onclick="deleteWish('${w.id}')">🗑</button>
       </div>
       <div class="wish-progress-row"><div class="wish-progress-label">SAVED ${fmt(saved)} of ${fmt(w.price)}</div><div class="wish-progress-pct">${pct}%</div></div>
       <div class="wish-track"><div class="wish-fill" style="width:${pct}%"></div></div>
@@ -1175,8 +1177,26 @@ function addSaving(id){
   setTimeout(()=>document.getElementById('wish-'+id)?.classList.remove('pop'),300);
   toast('✓ '+fmt(v)+' saved toward '+w.name);
 }
+function openEditWish(id){
+  const w=S.wishes.find(x=>x.id===id);
+  if(!w)return;
+  document.getElementById('editingWishId').value=id;
+  document.getElementById('wishModalTitle').textContent='Edit Wish Item';
+  document.getElementById('wishSubmitBtn').textContent='Save Changes ⭐';
+  document.getElementById('wishNameInput').value=w.name;
+  document.getElementById('wishPriceInput').value=w.price;
+  document.getElementById('wishNoteInput').value=w.note||'';
+  selWishEmoji=w.icon||'📱';
+  selPri=w.priority||'medium';
+  buildEmoji('emojiGridWish',WISH_EMOJIS,'selWishEmoji',selWishEmoji);
+  updatePriUI();
+  document.getElementById('wishModal').classList.add('open');
+}
 function deleteWish(id){S.wishes=S.wishes.filter(w=>w.id!==id);save();renderWishList();toast('Removed');}
 function openWishModal(){
+  document.getElementById('editingWishId').value='';
+  document.getElementById('wishModalTitle').textContent='Add to Wish List';
+  document.getElementById('wishSubmitBtn').textContent='Add to Wish List ⭐';
   selWishEmoji='📱';selPri='medium';
   document.getElementById('wishNameInput').value='';
   document.getElementById('wishPriceInput').value='';
@@ -1197,8 +1217,15 @@ function saveWish(){
   const price=parseFloat(document.getElementById('wishPriceInput').value);
   const note=document.getElementById('wishNoteInput').value.trim();
   if(!name){toast('Enter an item name');return;}if(!price||price<=0){toast('Enter a price');return;}
-  S.wishes.push({id:Date.now().toString(),name,price,note,icon:selWishEmoji,priority:selPri,saved:0,createdAt:new Date().toISOString()});
-  save();closeM('wishModal');renderWishList();toast('⭐ '+name+' added!');
+  const editId=document.getElementById('editingWishId').value;
+  if(editId){
+    const w=S.wishes.find(x=>x.id===editId);
+    if(w){w.name=name;w.price=price;w.note=note;w.icon=selWishEmoji;w.priority=selPri;}
+    save();closeM('wishModal');renderWishList();toast('✓ '+name+' updated');
+  } else {
+    S.wishes.push({id:Date.now().toString(),name,price,note,icon:selWishEmoji,priority:selPri,saved:0,createdAt:new Date().toISOString()});
+    save();closeM('wishModal');renderWishList();toast('⭐ '+name+' added!');
+  }
 }
 
 

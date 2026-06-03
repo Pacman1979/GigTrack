@@ -456,9 +456,27 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 
   <!-- ══ DEBTS ══ -->
   <div class="page" id="page-debts">
-    <div class="summary-2col">
-      <div class="chip"><div class="chip-label">DEBTS</div><div class="chip-val" id="debtCount" style="color:var(--danger)">0</div></div>
-      <div class="chip"><div class="chip-label">TOTAL OWING</div><div class="chip-val" id="debtTotal" style="color:var(--gold)">$0</div></div>
+    <div class="card" style="background:linear-gradient(135deg,rgba(255,77,106,.12),rgba(124,107,255,.08));border-color:rgba(255,77,106,.3)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase">TOTAL OWING</div>
+          <div style="font-size:32px;font-weight:800;letter-spacing:-.03em;color:var(--danger);line-height:1.1;margin-top:2px" id="debtTotal">$0</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;color:var(--muted)">DEBTS</div>
+          <div style="font-size:20px;font-weight:700;color:var(--text)" id="debtCount">0</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding-top:12px;border-top:1px solid var(--border)">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.08em;color:var(--muted)">PAYING / WEEK</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--teal);margin-top:2px" id="debtWeeklyPay">$0</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.08em;color:var(--muted)">DEBT-FREE EST.</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:var(--gold);margin-top:2px" id="debtFreeEst">—</div>
+        </div>
+      </div>
     </div>
     <div class="section-header-row">
       <div class="section-label">MY DEBTS</div>
@@ -602,10 +620,28 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
     <input type="hidden" id="editingDebtId" value="">
     <label class="field-label">DEBT NAME</label>
     <input class="text-input" type="text" id="debtNameInput" placeholder="e.g. ANZ Credit Card, ATO, Loan from Mum">
+    <label class="field-label">CATEGORY</label>
+    <div class="recur-options" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px" id="debtCatBtns">
+      <div class="recur-opt selected" onclick="selectDebtCat(this,'Credit Card')">💳 Card</div>
+      <div class="recur-opt" onclick="selectDebtCat(this,'Loan')">🏦 Loan</div>
+      <div class="recur-opt" onclick="selectDebtCat(this,'Tax')">📋 Tax</div>
+      <div class="recur-opt" onclick="selectDebtCat(this,'Fine')">🚗 Fine</div>
+      <div class="recur-opt" onclick="selectDebtCat(this,'Person')">👤 Person</div>
+      <div class="recur-opt" onclick="selectDebtCat(this,'Other')">💸 Other</div>
+    </div>
     <label class="field-label">AMOUNT OWING</label>
     <div class="amount-input-wrap"><span class="amount-prefix">$</span><input class="amount-input" type="number" id="debtAmountInput" placeholder="0.00" step="0.01" min="0"></div>
+    <label class="field-label">PAYMENT AMOUNT (0 IF NOT REPAYING YET)</label>
+    <div class="amount-input-wrap"><span class="amount-prefix">$</span><input class="amount-input" type="number" id="debtPaymentInput" placeholder="0.00" step="0.01" min="0"></div>
+    <label class="field-label">PAYMENT FREQUENCY</label>
+    <div class="recur-options" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px" id="debtFreqBtns">
+      <div class="recur-opt selected" onclick="selectDebtFreq(this,'monthly')">Monthly</div>
+      <div class="recur-opt" onclick="selectDebtFreq(this,'fortnightly')">Fort.</div>
+      <div class="recur-opt" onclick="selectDebtFreq(this,'weekly')">Weekly</div>
+      <div class="recur-opt" onclick="selectDebtFreq(this,'none')">None</div>
+    </div>
     <label class="field-label">NOTE (OPTIONAL)</label>
-    <input class="text-input" type="text" id="debtNoteInput" placeholder="e.g. Not currently repaying">
+    <input class="text-input" type="text" id="debtNoteInput" placeholder="e.g. Interest free until June">
     <button class="submit-btn" id="debtSubmitBtn" style="background:linear-gradient(135deg,var(--danger),#cc2244)" onclick="saveDebt()">Save Debt</button>
   </div>
 </div>
@@ -1232,44 +1268,97 @@ function saveWish(){
 // ══════════════════════════════════════
 // DEBTS
 // ══════════════════════════════════════
+function debtCatIcon(cat){
+  const m={'Credit Card':'💳','Loan':'🏦','Tax':'📋','Fine':'🚗','Person':'👤','Other':'💸'};
+  return m[cat]||'💸';
+}
+
 function renderDebts(){
   const debts = S.debts || [];
   const total = debts.reduce((a,d)=>a+(d.amount||0),0);
+  // Weekly payment total (convert each debt's payment to weekly equivalent)
+  const weeklyPay = debts.reduce((a,d)=>{
+    if(!d.payment||d.freq==='none')return a;
+    return a+toWeekly(d.payment, d.freq);
+  },0);
   document.getElementById('debtCount').textContent = debts.length;
   document.getElementById('debtTotal').textContent = fmtShort(total);
+  document.getElementById('debtWeeklyPay').textContent = fmtShort(weeklyPay);
+  // Debt-free estimate: total / weekly payment = weeks
+  const estEl = document.getElementById('debtFreeEst');
+  const payingDebts = debts.filter(d=>d.payment>0&&d.freq!=='none');
+  const payingTotal = payingDebts.reduce((a,d)=>a+(d.amount||0),0);
+  if(weeklyPay>0 && payingTotal>0){
+    const weeks = Math.ceil(payingTotal/weeklyPay);
+    if(weeks<=8) estEl.textContent = weeks+' wks';
+    else if(weeks<=104) estEl.textContent = Math.round(weeks/4.345)+' mo';
+    else estEl.textContent = (weeks/52).toFixed(1)+' yr';
+  } else {
+    estEl.textContent = '—';
+  }
   const el = document.getElementById('debtList');
   if(!debts.length){
     el.innerHTML = '<div class="empty-state">NO DEBTS ADDED YET<br>TAP + ADD TO START</div>';
     return;
   }
-  el.innerHTML = [...debts].sort((a,b)=>(b.amount||0)-(a.amount||0)).map(d=>`
-    <div class="debt-item">
+  el.innerHTML = [...debts].sort((a,b)=>(b.amount||0)-(a.amount||0)).map(d=>{
+    const icon = debtCatIcon(d.cat);
+    const payInfo = (d.payment>0 && d.freq!=='none')
+      ? fmt(d.payment)+'/'+({weekly:'wk',fortnightly:'fortnight',monthly:'mo'}[d.freq]||d.freq)
+      : 'Not currently repaying';
+    const origText = d.original ? `<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px">started at ${fmt(d.original)}</div>` : '';
+    const pct = d.original ? Math.max(0,Math.min(100,Math.round((1-(d.amount/d.original))*100))) : 0;
+    const progBar = d.original && d.original>d.amount ? `<div style="height:4px;background:var(--surface2);border-radius:99px;margin-top:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--teal),var(--accent));border-radius:99px"></div></div>` : '';
+    return `<div class="debt-item">
       <div class="debt-top">
-        <div class="debt-icon">💳</div>
+        <div class="debt-icon">${icon}</div>
         <div class="debt-info">
           <div class="debt-name">${d.name}</div>
-          <div class="debt-note">${d.note ? d.note : 'Tracked only — not currently in budget'}</div>
+          <div class="debt-note">${d.cat||'Other'} · ${payInfo}</div>
+          ${d.note?`<div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:3px;font-style:italic">${d.note}</div>`:''}
+          ${origText}
         </div>
         <div class="debt-right">
           <div class="debt-amount">${fmt(d.amount||0)}</div>
           <div style="display:flex;gap:4px">
             <button class="shift-edit-btn" onclick="openEditDebt('${d.id}')">✏️</button>
-            <button class="debt-delete" onclick="deleteDebt('${d.id}')">✕</button>
+            <button class="debt-delete" onclick="deleteDebt('${d.id}')">🗑</button>
           </div>
         </div>
       </div>
-    </div>
-  `).join('');
+      ${progBar}
+    </div>`;
+  }).join('');
 }
+
+let selDebtCat = 'Credit Card';
+let selDebtFreq = 'monthly';
+
+function selectDebtCat(el, cat){
+  selDebtCat = cat;
+  document.querySelectorAll('#debtCatBtns .recur-opt').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+function selectDebtFreq(el, freq){
+  selDebtFreq = freq;
+  document.querySelectorAll('#debtFreqBtns .recur-opt').forEach(o=>o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
 function openDebtModal(){
   document.getElementById('editingDebtId').value = '';
   document.getElementById('debtModalTitle').textContent = 'Add Debt';
   document.getElementById('debtSubmitBtn').textContent = 'Save Debt';
   document.getElementById('debtNameInput').value = '';
   document.getElementById('debtAmountInput').value = '';
+  document.getElementById('debtPaymentInput').value = '';
   document.getElementById('debtNoteInput').value = '';
+  selDebtCat = 'Credit Card'; selDebtFreq = 'monthly';
+  document.querySelectorAll('#debtCatBtns .recur-opt').forEach(o=>o.classList.toggle('selected',o.textContent.includes('Card')));
+  document.querySelectorAll('#debtFreqBtns .recur-opt').forEach(o=>o.classList.toggle('selected',o.textContent==='Monthly'));
   document.getElementById('debtModal').classList.add('open');
 }
+
 function openEditDebt(id){
   const debt = (S.debts || []).find(d=>d.id===id);
   if(!debt) return;
@@ -1278,13 +1367,22 @@ function openEditDebt(id){
   document.getElementById('debtSubmitBtn').textContent = 'Update Debt';
   document.getElementById('debtNameInput').value = debt.name || '';
   document.getElementById('debtAmountInput').value = debt.amount || '';
+  document.getElementById('debtPaymentInput').value = debt.payment || '';
   document.getElementById('debtNoteInput').value = debt.note || '';
+  selDebtCat = debt.cat || 'Credit Card';
+  selDebtFreq = debt.freq || 'monthly';
+  const catLabels={'Credit Card':'Card','Loan':'Loan','Tax':'Tax','Fine':'Fine','Person':'Person','Other':'Other'};
+  document.querySelectorAll('#debtCatBtns .recur-opt').forEach(o=>o.classList.toggle('selected',o.textContent.includes(catLabels[selDebtCat])));
+  const freqLabels={weekly:'Weekly',fortnightly:'Fort.',monthly:'Monthly',none:'None'};
+  document.querySelectorAll('#debtFreqBtns .recur-opt').forEach(o=>o.classList.toggle('selected',o.textContent===freqLabels[selDebtFreq]));
   document.getElementById('debtModal').classList.add('open');
 }
+
 function saveDebt(){
   const editId = document.getElementById('editingDebtId').value;
   const name = document.getElementById('debtNameInput').value.trim();
   const amount = parseFloat(document.getElementById('debtAmountInput').value);
+  const payment = parseFloat(document.getElementById('debtPaymentInput').value) || 0;
   const note = document.getElementById('debtNoteInput').value.trim();
   if(!name){ toast('Enter a debt name'); return; }
   if(!amount || amount <= 0){ toast('Enter amount owing'); return; }
@@ -1293,13 +1391,17 @@ function saveDebt(){
     if(!debt) return;
     debt.name = name;
     debt.amount = amount;
+    debt.payment = payment;
+    debt.freq = selDebtFreq;
+    debt.cat = selDebtCat;
     debt.note = note;
     save(); closeM('debtModal'); renderDebts(); toast('✓ '+name+' updated');
     return;
   }
-  S.debts.push({ id:'d'+Date.now(), name, amount, note, createdAt:new Date().toISOString() });
+  S.debts.push({ id:'d'+Date.now(), name, amount, original:amount, payment, freq:selDebtFreq, cat:selDebtCat, note, createdAt:new Date().toISOString(), lastReduced:todayStr() });
   save(); closeM('debtModal'); renderDebts(); toast('✓ '+name+' added');
 }
+
 function deleteDebt(id){
   S.debts = (S.debts || []).filter(d=>d.id!==id);
   save(); renderDebts(); toast('Debt removed');

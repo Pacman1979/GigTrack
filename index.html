@@ -290,6 +290,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .wt-break-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.02em;padding-right:12px}
 .wt-break-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap}
 
+/* ── Work Day Toggles ── */
+.wd-btn{padding:9px 2px;border-radius:9px;border:1.5px solid var(--border);background:var(--surface2);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .15s;text-align:center}
+.wd-btn.on{border-color:var(--teal);background:var(--teal-dim);color:var(--teal)}
+.wd-btn.today{box-shadow:0 0 0 2px var(--accent)}
+
 /* Toast */
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;z-index:300}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -377,6 +382,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="wt-break-row"><span class="wt-break-label">Bills due this week</span><span class="wt-break-val" id="wtBills">$0</span></div>
         <div class="wt-break-row"><span class="wt-break-label">Weekly share of monthly/yearly budget</span><span class="wt-break-val" id="wtBudget">$0</span></div>
         <div class="wt-break-row"><span class="wt-break-label">Debt payments (weekly equiv.)</span><span class="wt-break-val" id="wtDebts">$0</span></div>
+        <div class="wt-break-row" id="wtCarryRow" style="display:none"><span class="wt-break-label" style="color:var(--danger)">Carried over (past shortfalls)</span><span class="wt-break-val" id="wtCarry" style="color:var(--danger)">$0</span></div>
         <div class="wt-break-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px"><span class="wt-break-label" style="color:var(--text);font-weight:700">TOTAL WEEKLY TARGET</span><span class="wt-break-val" id="wtTotal" style="color:var(--accent);font-weight:700">$0</span></div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:12px;line-height:1.6">This is the minimum to cover everything you've entered. Edit your Upcoming, Budget &amp; Debts tabs to keep it accurate.</div>
       </div>
@@ -444,11 +450,13 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div id="dayEditorList"></div>
     </div>
     <div class="card">
-      <div class="section-label">DAILY GOAL</div>
-      <div class="goal-edit-row">
-        <input class="goal-input" type="number" id="goalInput" placeholder="150" min="0" step="10">
-        <button class="goal-save-btn" onclick="saveGoal()">SET GOAL</button>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+        <div class="section-label" style="margin-bottom:0">TODAY'S GOAL</div>
+        <div style="font-size:22px;font-weight:800;letter-spacing:-.02em;color:var(--gold)" id="smartGoalAmount">$0</div>
       </div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.04em;margin-bottom:14px;line-height:1.5" id="smartGoalMath">Set your working days below</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;margin-bottom:8px">WORKING DAYS THIS WEEK</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:5px" id="workDaysRow"></div>
     </div>
     <div class="shifts-card">
       <div class="shifts-header"><div class="section-label">TODAY'S LOG</div><div style="display:flex;gap:6px"><button class="clear-btn" style="color:var(--danger)" onclick="openDeductionModal()">- COST</button><button class="clear-btn" onclick="clearToday()">CLEAR</button></div></div>
@@ -784,6 +792,9 @@ let S = (() => {
     shifts:[], deductions:[], dailyGoal:150, weekHistory:{},
     expenses:[], wishes:[], debts:[],
     budget:[], weeklyIncome:800,
+    workDays:[true,true,true,true,true,true,false], // Mon-Sun; Sunday off by default
+    carryover:0,           // accumulated shortfall from previous weeks
+    lastWeekChecked:null,  // Monday date-string of the last week we reconciled
     // budget item: { id, name, amount, freq, icon }
   };
   try {
@@ -897,9 +908,135 @@ function fabAction() {
 // ══════════════════════════════════════
 // EARNINGS
 // ══════════════════════════════════════
-function calcWeeklyTarget(){
+// ══════════════════════════════════════
+// SMART DAILY GOAL + CARRYOVER
+// ══════════════════════════════════════
+function getMondayOf(date){
+  const d=new Date(date);
+  const dow=(d.getDay()+6)%7;
+  d.setDate(d.getDate()-dow);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function dsLocal(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+
+// Earnings for a specific week (given that week's Monday)
+function earnedInWeek(monday){
+  const sun=new Date(monday);sun.setDate(monday.getDate()+6);sun.setHours(23,59,59,999);
+  return S.shifts.filter(s=>{
+    const d=new Date(s.timestamp);
+    return d>=monday && d<=sun;
+  }).reduce((a,s)=>a+s.amount,0);
+}
+
+// Reconcile previous weeks: if any completed week fell short, stack the shortfall
+function reconcileCarryover(){
+  const thisMonday=getMondayOf(new Date());
+  const thisMondayStr=dsLocal(thisMonday);
+  if(S.lastWeekChecked===thisMondayStr) return; // already done this week
+
+  // Base weekly target (without carryover) — costs are roughly stable week to week
+  const baseTarget=calcWeeklyTarget(true).total;
+
+  if(S.lastWeekChecked){
+    // Walk each completed week from lastWeekChecked up to (not including) this week
+    let cursor=new Date(S.lastWeekChecked+'T00:00:00');
+    while(dsLocal(cursor)!==thisMondayStr){
+      const earned=earnedInWeek(cursor);
+      const shortfall=baseTarget-earned;
+      if(shortfall>0) S.carryover+=shortfall;
+      cursor.setDate(cursor.getDate()+7);
+      // safety stop
+      if(cursor > new Date()) break;
+    }
+  }
+  S.lastWeekChecked=thisMondayStr;
+  save();
+}
+
+// How many working days REMAIN this week (today + future toggled-on days)
+function remainingWorkDays(){
+  const now=new Date();
+  const todayIdx=(now.getDay()+6)%7; // 0=Mon .. 6=Sun
+  let count=0;
+  for(let i=todayIdx;i<7;i++){
+    if(S.workDays[i]) count++;
+  }
+  return count;
+}
+
+function isTodayWorkDay(){
+  const todayIdx=(new Date().getDay()+6)%7;
+  return S.workDays[todayIdx];
+}
+
+function renderSmartGoal(){
+  const target=calcWeeklyTarget().total; // includes carryover
+  const earnedWk=getWeekEarned();
+  const remainTarget=Math.max(0,target-earnedWk);
+  const remDays=remainingWorkDays();
+  const amtEl=document.getElementById('smartGoalAmount');
+  const mathEl=document.getElementById('smartGoalMath');
+
+  if(target<=0){
+    amtEl.textContent='$0';
+    mathEl.textContent='Add bills, budget or debts to set a target';
+  } else if(remainTarget<=0){
+    amtEl.textContent='✓';
+    amtEl.style.color='var(--teal)';
+    mathEl.innerHTML='🎯 Week covered! Anything today is ahead.';
+  } else if(!isTodayWorkDay()){
+    amtEl.textContent='😌';
+    amtEl.style.color='var(--muted)';
+    mathEl.innerHTML='Rest day — '+fmtShort(remainTarget)+' still needed across '+remDays+' working day'+(remDays===1?'':'s')+' left';
+  } else if(remDays<=0){
+    amtEl.textContent=fmtShort(remainTarget);
+    amtEl.style.color='var(--danger)';
+    mathEl.innerHTML='⚠️ No working days left — '+fmtShort(remainTarget)+' short this week';
+  } else {
+    const todayGoal=remainTarget/remDays;
+    amtEl.textContent=fmtShort(todayGoal);
+    amtEl.style.color='var(--gold)';
+    mathEl.innerHTML=fmtShort(remainTarget)+' left over '+remDays+' working day'+(remDays===1?'':'s');
+  }
+
+  // Update the daily goal value used for the progress bar (today's portion)
+  if(target>0 && remainTarget>0 && isTodayWorkDay() && remDays>0){
+    S._derivedDailyGoal=remainTarget/remDays;
+  } else if(remainTarget<=0){
+    S._derivedDailyGoal=0;
+  } else {
+    S._derivedDailyGoal=remainTarget; // rest day or no days left: show full remaining
+  }
+}
+
+function renderWorkDays(){
+  const row=document.getElementById('workDaysRow');
+  if(!row) return;
+  const labels=['M','T','W','T','F','S','S'];
+  const todayIdx=(new Date().getDay()+6)%7;
+  row.innerHTML='';
+  labels.forEach((lab,i)=>{
+    const btn=document.createElement('div');
+    btn.className='wd-btn'+(S.workDays[i]?' on':'')+(i===todayIdx?' today':'');
+    btn.textContent=lab;
+    btn.onclick=(function(idx){return function(){ toggleWorkDay(idx); };})(i);
+    row.appendChild(btn);
+  });
+}
+
+function toggleWorkDay(i){
+  S.workDays[i]=!S.workDays[i];
+  save();
+  renderWorkDays();
+  renderSmartGoal();
+  renderEarnings();
+}
+
+function calcWeeklyTarget(baseOnly){
   const now=new Date();now.setHours(0,0,0,0);
-  const localDs=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 
   // Source 1: Bills due THIS WEEK (next 7 days) from Upcoming Expenses
   const in7=new Date(now);in7.setDate(in7.getDate()+7);
@@ -917,8 +1054,11 @@ function calcWeeklyTarget(){
     return a+toWeekly(d.payment,d.freq);
   },0);
 
-  const total=bills+budget+debts;
-  return {bills,budget,debts,total};
+  // Source 4: Carried-over shortfall from previous weeks (skip when baseOnly)
+  const carry=baseOnly ? 0 : (S.carryover||0);
+
+  const total=bills+budget+debts+carry;
+  return {bills,budget,debts,carry,total};
 }
 
 function getWeekEarned(){
@@ -950,6 +1090,13 @@ function renderWeeklyTarget(){
   document.getElementById('wtBills').textContent=fmt(t.bills);
   document.getElementById('wtBudget').textContent=fmt(t.budget);
   document.getElementById('wtDebts').textContent=fmt(t.debts);
+  const carryRow=document.getElementById('wtCarryRow');
+  if(t.carry>0){
+    carryRow.style.display='flex';
+    document.getElementById('wtCarry').textContent='+'+fmt(t.carry);
+  } else {
+    carryRow.style.display='none';
+  }
   document.getElementById('wtTotal').textContent=fmt(t.total);
 }
 
@@ -971,7 +1118,7 @@ function renderEarnings() {
   const ue = today.filter(s=>s.platform==='UBEREATS').reduce((a,s)=>a+s.amount,0);
   const sh = today.filter(s=>s.platform==='SHERPA').reduce((a,s)=>a+s.amount,0);
   const oth = today.filter(s=>s.platform==='OTHER').reduce((a,s)=>a+s.amount,0);
-  const total=dd+ue+sh+oth, goal=S.dailyGoal||150, pct=Math.min(100,Math.round(total/goal*100));
+  const total=dd+ue+sh+oth, goal=(S._derivedDailyGoal!=null?S._derivedDailyGoal:(S.dailyGoal||150))||1, pct=Math.min(100,Math.round(total/goal*100));
 
   document.getElementById('dateStrip').textContent =
     new Date().toLocaleDateString('en-AU',{weekday:'long',day:'numeric',month:'long',year:'numeric'}).toUpperCase();
@@ -994,7 +1141,7 @@ function renderEarnings() {
   document.getElementById('goalPct').textContent=pct+'%';
   document.getElementById('progressFill').style.width=pct+'%';
   document.getElementById('goalRemaining').textContent=
-    total>=goal ? '🎯 Goal reached!' : `$${(goal-total).toFixed(2)} to reach $${goal} goal`;
+    total>=goal ? '🎯 Today\'s goal reached!' : `$${(goal-total).toFixed(2)} to reach today's goal`;
   document.getElementById('ddAmount').textContent=fmt(dd);
   document.getElementById('ueAmount').textContent=fmt(ue);
   document.getElementById('shAmount').textContent=fmt(sh);
@@ -1003,7 +1150,6 @@ function renderEarnings() {
   document.getElementById('ueShifts').textContent=today.filter(s=>s.platform==='UBEREATS').length+' entries';
   document.getElementById('shShifts').textContent=today.filter(s=>s.platform==='SHERPA').length+' entries';
   document.getElementById('othShifts').textContent=today.filter(s=>s.platform==='OTHER').length+' entries';
-  document.getElementById('goalInput').placeholder=goal;
 
   // Week bars
   const DAYS=['MON','TUE','WED','THU','FRI','SAT','SUN'];
@@ -1048,6 +1194,8 @@ function renderEarnings() {
   });
   updateBadge();
   renderWeeklyTarget();
+  renderSmartGoal();
+  renderWorkDays();
 
   // Deductions log - DOM-based to avoid quote escaping issues
   const dl=document.getElementById('deductionsList');
@@ -2197,6 +2345,7 @@ function restoreData(){
 // ══════════════════════════════════════
 // INIT
 // ══════════════════════════════════════
+reconcileCarryover(); // check for past-week shortfalls to carry over
 save(); // persist seeded budget items
 renderEarnings();
 document.getElementById('amountInput').addEventListener('keydown',e=>{if(e.key==='Enter')addShift();});

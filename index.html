@@ -285,6 +285,11 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .submit-btn.gold{background:linear-gradient(135deg,var(--gold),#e08c00);color:#000}
 .submit-btn.teal{background:linear-gradient(135deg,var(--teal),#009e7e);color:#000}
 
+/* ── Weekly Target Breakdown ── */
+.wt-break-row{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0}
+.wt-break-label{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);letter-spacing:.02em;padding-right:12px}
+.wt-break-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text);white-space:nowrap}
+
 /* Toast */
 .toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:10px 18px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;z-index:300}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -346,6 +351,37 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
       <div class="progress-track"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
       <div class="goal-remaining" id="goalRemaining"></div>
     </div>
+
+    <!-- Weekly Target Card -->
+    <div class="card" id="weeklyTargetCard" onclick="toggleTargetBreakdown()" style="cursor:pointer;background:linear-gradient(135deg,rgba(124,107,255,.14),rgba(0,212,170,.08));border-color:rgba(124,107,255,.35)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase">NEED THIS WEEK</div>
+          <div style="font-size:30px;font-weight:800;letter-spacing:-.03em;color:var(--accent);line-height:1.1;margin-top:2px" id="weeklyTargetAmount">$0</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;letter-spacing:.08em;color:var(--muted)">EARNED THIS WK</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--teal);margin-top:2px" id="weeklyEarnedAmount">$0</div>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:6px" id="weeklyTargetTap">TAP FOR BREAKDOWN ▾</div>
+        </div>
+      </div>
+      <div style="height:8px;background:var(--surface2);border-radius:99px;margin-top:14px;overflow:hidden">
+        <div id="weeklyTargetFill" style="height:100%;width:0%;background:linear-gradient(90deg,var(--accent),var(--teal));border-radius:99px;transition:width .4s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:8px">
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--teal)" id="weeklyTargetPct">0%</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)" id="weeklyTargetRemain">$0 to go</div>
+      </div>
+      <!-- Breakdown (hidden by default) -->
+      <div id="weeklyTargetBreakdown" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        <div class="wt-break-row"><span class="wt-break-label">Bills due this week</span><span class="wt-break-val" id="wtBills">$0</span></div>
+        <div class="wt-break-row"><span class="wt-break-label">Weekly share of monthly/yearly budget</span><span class="wt-break-val" id="wtBudget">$0</span></div>
+        <div class="wt-break-row"><span class="wt-break-label">Debt payments (weekly equiv.)</span><span class="wt-break-val" id="wtDebts">$0</span></div>
+        <div class="wt-break-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px"><span class="wt-break-label" style="color:var(--text);font-weight:700">TOTAL WEEKLY TARGET</span><span class="wt-break-val" id="wtTotal" style="color:var(--accent);font-weight:700">$0</span></div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:12px;line-height:1.6">This is the minimum to cover everything you've entered. Edit your Upcoming, Budget &amp; Debts tabs to keep it accurate.</div>
+      </div>
+    </div>
+
     <div class="platforms">
       <div class="platform-card dd" onclick="openEarningsModal('DOORDASH')">
         <div class="platform-dot"></div><div class="platform-name">DoorDash</div>
@@ -861,6 +897,74 @@ function fabAction() {
 // ══════════════════════════════════════
 // EARNINGS
 // ══════════════════════════════════════
+function calcWeeklyTarget(){
+  const now=new Date();now.setHours(0,0,0,0);
+  const localDs=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+
+  // Source 1: Bills due THIS WEEK (next 7 days) from Upcoming Expenses
+  const in7=new Date(now);in7.setDate(in7.getDate()+7);
+  const bills=getActiveExpenses().filter(e=>{
+    const d=new Date(e.dueDate+'T00:00:00');
+    return d>=now && d<=in7;
+  }).reduce((a,e)=>a+e.amount,0);
+
+  // Source 2: Weekly share of ALL recurring budget items (rent, groceries, etc.)
+  const budget=(S.budget||[]).reduce((a,b)=>a+toWeekly(b.amount,b.freq),0);
+
+  // Source 3: Debt payments converted to weekly equivalent
+  const debts=(S.debts||[]).reduce((a,d)=>{
+    if(!d.payment||d.freq==='none')return a;
+    return a+toWeekly(d.payment,d.freq);
+  },0);
+
+  const total=bills+budget+debts;
+  return {bills,budget,debts,total};
+}
+
+function getWeekEarned(){
+  // Sum all earnings for the current week (Mon-Sun), including today
+  const now=new Date();
+  const dow=(now.getDay()+6)%7;
+  const monday=new Date(now);monday.setDate(now.getDate()-dow);monday.setHours(0,0,0,0);
+  const sunday=new Date(monday);sunday.setDate(monday.getDate()+6);sunday.setHours(23,59,59,999);
+  return S.shifts.filter(s=>{
+    const d=new Date(s.timestamp);
+    return d>=monday && d<=sunday;
+  }).reduce((a,s)=>a+s.amount,0);
+}
+
+function renderWeeklyTarget(){
+  const t=calcWeeklyTarget();
+  const earned=getWeekEarned();
+  const pct=t.total>0?Math.min(100,Math.round(earned/t.total*100)):0;
+  const remain=Math.max(0,t.total-earned);
+
+  document.getElementById('weeklyTargetAmount').textContent=fmtShort(t.total);
+  document.getElementById('weeklyEarnedAmount').textContent=fmtShort(earned);
+  document.getElementById('weeklyTargetFill').style.width=pct+'%';
+  document.getElementById('weeklyTargetPct').textContent=pct+'%';
+  document.getElementById('weeklyTargetRemain').textContent=
+    remain<=0 ? '🎯 Covered!' : fmtShort(remain)+' to go';
+
+  // Breakdown
+  document.getElementById('wtBills').textContent=fmt(t.bills);
+  document.getElementById('wtBudget').textContent=fmt(t.budget);
+  document.getElementById('wtDebts').textContent=fmt(t.debts);
+  document.getElementById('wtTotal').textContent=fmt(t.total);
+}
+
+function toggleTargetBreakdown(){
+  const bd=document.getElementById('weeklyTargetBreakdown');
+  const tap=document.getElementById('weeklyTargetTap');
+  if(bd.style.display==='none'){
+    bd.style.display='block';
+    tap.textContent='TAP TO HIDE ▴';
+  } else {
+    bd.style.display='none';
+    tap.textContent='TAP FOR BREAKDOWN ▾';
+  }
+}
+
 function renderEarnings() {
   const today = todayShifts();
   const dd = today.filter(s=>s.platform==='DOORDASH').reduce((a,s)=>a+s.amount,0);
@@ -943,6 +1047,7 @@ function renderEarnings() {
     wb.appendChild(el);
   });
   updateBadge();
+  renderWeeklyTarget();
 
   // Deductions log - DOM-based to avoid quote escaping issues
   const dl=document.getElementById('deductionsList');

@@ -14,7 +14,7 @@
   --dd:#ff3008;--dd-dim:rgba(255,48,8,.15);
   --ue:#06c167;--ue-dim:rgba(6,193,103,.15);
   --sh:#00b4d8;--sh-dim:rgba(0,180,216,.15);
-  --text:#f0f0f8;--muted:#6a6a8a;
+  --text:#f0f0f8;--muted:#9a9ab8;
   --accent:#7c6bff;--accent-dim:rgba(124,107,255,.15);
   --gold:#ffc53d;--gold-dim:rgba(255,197,61,.12);
   --danger:#ff4d6a;--danger-dim:rgba(255,77,106,.12);
@@ -302,18 +302,18 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 /* ── Modal overrides - ensure visibility on all Android devices ── */
 .modal-overlay.open .modal { display:block }
 .modal .modal-title { color:#ffffff !important; font-size:20px; font-weight:800 }
-.modal .field-label { color:#aaaacc !important }
+.modal .field-label { color:#b8b8dd !important }
 .modal .plat-btn { color:#ccccee !important; background:#1a1a30 !important; border-color:#444466 !important }
 .modal .plat-btn.selected.dd { color:var(--dd) !important; background:var(--dd-dim) !important }
 .modal .plat-btn.selected.ue { color:var(--ue) !important; background:var(--ue-dim) !important }
 .modal .plat-btn.selected.sh { color:var(--sh) !important; background:var(--sh-dim) !important }
 .modal input { color:#ffffff !important; background:#1a1a30 !important }
 .modal input::placeholder { color:#666688 !important }
-.modal .section-label { color:#aaaacc !important }
+.modal .section-label { color:#b8b8dd !important }
 .modal .shift-platform { font-weight:700 }
-.modal .shift-time { color:#aaaacc !important }
+.modal .shift-time { color:#b8b8dd !important }
 .modal .shift-amount { font-weight:700 }
-.modal .empty-state { color:#8888aa !important }
+.modal .empty-state { color:#a8a8cc !important }
 </style>
 </head>
 <body>
@@ -433,18 +433,18 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div style="font-size:15px;font-weight:800;color:#ffffff;letter-spacing:-.01em" id="dayEditorTitle"></div>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#ffc53d" id="dayEditorTotal">$0.00</div>
-          <button onclick="closeDayEditor()" style="background:none;border:none;color:#aaaacc;font-size:20px;cursor:pointer;padding:2px 6px">✕</button>
+          <button onclick="closeDayEditor()" style="background:none;border:none;color:#b8b8dd;font-size:20px;cursor:pointer;padding:2px 6px">✕</button>
         </div>
       </div>
-      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#8888aa;letter-spacing:.08em;margin-bottom:14px" id="dayEditorSub"></div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:10px;color:#a8a8cc;letter-spacing:.08em;margin-bottom:14px" id="dayEditorSub"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
-        <button id="deBtnDD" onclick="deSelectPlat('DOORDASH')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#aaaacc;cursor:pointer">🔴 DoorDash</button>
-        <button id="deBtnUE" onclick="deSelectPlat('UBEREATS')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#aaaacc;cursor:pointer">🟢 Uber Eats</button>
-        <button id="deBtnSH" onclick="deSelectPlat('SHERPA')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#aaaacc;cursor:pointer">🔵 Sherpa</button>
-        <button id="deBtnOTH" onclick="deSelectPlat('OTHER')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#aaaacc;cursor:pointer">🟣 Other</button>
+        <button id="deBtnDD" onclick="deSelectPlat('DOORDASH')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#b8b8dd;cursor:pointer">🔴 DoorDash</button>
+        <button id="deBtnUE" onclick="deSelectPlat('UBEREATS')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#b8b8dd;cursor:pointer">🟢 Uber Eats</button>
+        <button id="deBtnSH" onclick="deSelectPlat('SHERPA')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#b8b8dd;cursor:pointer">🔵 Sherpa</button>
+        <button id="deBtnOTH" onclick="deSelectPlat('OTHER')" style="padding:10px 4px;border-radius:10px;border:1.5px solid #3a3a55;background:#12121a;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;color:#b8b8dd;cursor:pointer">🟣 Other</button>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:14px">
-        <div style="position:relative;flex:1"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:16px;color:#8888aa">$</span><input type="number" id="dayEditorAmount" placeholder="0.00" step="0.01" min="0" style="width:100%;background:#12121a;border:1.5px solid #3a3a55;border-radius:10px;padding:11px 11px 11px 26px;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;color:#ffffff;outline:none"></div>
+        <div style="position:relative;flex:1"><span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:16px;color:#a8a8cc">$</span><input type="number" id="dayEditorAmount" placeholder="0.00" step="0.01" min="0" style="width:100%;background:#12121a;border:1.5px solid #3a3a55;border-radius:10px;padding:11px 11px 11px 26px;font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:600;color:#ffffff;outline:none"></div>
         <button onclick="addDayEditorEntry()" style="background:linear-gradient(135deg,#7c6bff,#5a4bcc);border:none;border-radius:10px;padding:0 18px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;color:white;cursor:pointer;white-space:nowrap">+ ADD</button>
       </div>
       <div id="dayEditorList"></div>
@@ -2142,7 +2142,7 @@ function renderDayEditor(){
   el.innerHTML = '';
   if(!shifts.length){
     const empty = document.createElement('div');
-    empty.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:11px;color:#8888aa;text-align:center;padding:16px 0;letter-spacing:.05em';
+    empty.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:11px;color:#a8a8cc;text-align:center;padding:16px 0;letter-spacing:.05em';
     empty.textContent = 'NO ENTRIES — USE + ADD ABOVE';
     el.appendChild(empty);
     return;
@@ -2163,7 +2163,7 @@ function renderDayEditor(){
     platEl.style.cssText = 'font-size:12px;font-weight:700;color:'+c;
     platEl.textContent = n;
     const timeEl = document.createElement('div');
-    timeEl.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:10px;color:#8888aa';
+    timeEl.style.cssText = 'font-family:JetBrains Mono,monospace;font-size:10px;color:#a8a8cc';
     timeEl.textContent = time+(s.note?' · '+s.note:'');
     info.appendChild(platEl);
     info.appendChild(timeEl);
@@ -2204,7 +2204,7 @@ function deSelectPlat(p){
     if(platMap[k]===p){
       btn.style.borderColor=colMap[k]; btn.style.background=dimMap[k]; btn.style.color=colMap[k];
     } else {
-      btn.style.borderColor='#3a3a55'; btn.style.background='#12121a'; btn.style.color='#aaaacc';
+      btn.style.borderColor='#3a3a55'; btn.style.background='#12121a'; btn.style.color='#b8b8dd';
     }
   });
 }

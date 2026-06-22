@@ -385,6 +385,7 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
         <div class="wt-break-row" id="wtCarryRow" style="display:none"><span class="wt-break-label" style="color:var(--danger)">Carried over (past shortfalls)</span><span class="wt-break-val" id="wtCarry" style="color:var(--danger)">$0</span></div>
         <div class="wt-break-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:10px"><span class="wt-break-label" style="color:var(--text);font-weight:700">TOTAL WEEKLY TARGET</span><span class="wt-break-val" id="wtTotal" style="color:var(--accent);font-weight:700">$0</span></div>
         <div style="font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);margin-top:12px;line-height:1.6">This is the minimum to cover everything you've entered. Edit your Upcoming, Budget &amp; Debts tabs to keep it accurate.</div>
+        <button onclick="event.stopPropagation();resetCarryover()" id="resetCarryBtn" style="display:none;margin-top:14px;width:100%;padding:10px;border-radius:10px;border:1.5px solid rgba(255,77,106,.3);background:rgba(255,77,106,.08);font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--danger);cursor:pointer;letter-spacing:.04em">RESET CARRYOVER ($<span id="resetCarryAmount">0</span>)</button>
       </div>
     </div>
 
@@ -1091,13 +1092,24 @@ function renderWeeklyTarget(){
   document.getElementById('wtBudget').textContent=fmt(t.budget);
   document.getElementById('wtDebts').textContent=fmt(t.debts);
   const carryRow=document.getElementById('wtCarryRow');
+  const resetBtn=document.getElementById('resetCarryBtn');
   if(t.carry>0){
     carryRow.style.display='flex';
     document.getElementById('wtCarry').textContent='+'+fmt(t.carry);
+    if(resetBtn){resetBtn.style.display='block';document.getElementById('resetCarryAmount').textContent=t.carry.toFixed(0);}
   } else {
     carryRow.style.display='none';
+    if(resetBtn) resetBtn.style.display='none';
   }
   document.getElementById('wtTotal').textContent=fmt(t.total);
+}
+
+function resetCarryover(){
+  if(!S.carryover||S.carryover<=0) return;
+  S.carryover=0;
+  save();
+  renderEarnings();
+  toast('Carryover cleared — fresh start');
 }
 
 function toggleTargetBreakdown(){
